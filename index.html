@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cosmic Reaction</title>
+
+<style>
+
+body{
+margin:0;
+overflow:hidden;
+background:black;
+color:white;
+font-family:Arial;
+}
+
+canvas{
+display:block;
+}
+
+#ui{
+position:absolute;
+top:10px;
+left:10px;
+font-size:20px;
+}
+
+#gameOver{
+position:absolute;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+text-align:center;
+display:none;
+}
+
+button{
+padding:12px 24px;
+font-size:18px;
+margin-top:10px;
+}
+
+#mobile{
+position:absolute;
+bottom:20px;
+width:100%;
+display:flex;
+justify-content:center;
+gap:20px;
+}
+
+.ctrl{
+width:70px;
+height:70px;
+font-size:30px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="ui">
+Score: <span id="score">0</span><br>
+Best: <span id="best">0</span>
+</div>
+
+<div id="gameOver">
+<h1>Game Over</h1>
+<p>Score: <span id="finalScore"></span></p>
+<button onclick="restart()">Restart</button>
+</div>
+
+<canvas id="game"></canvas>
+
+<div id="mobile">
+<button class="ctrl" ontouchstart="left=true" ontouchend="left=false">◀</button>
+<button class="ctrl" ontouchstart="boost=true" ontouchend="boost=false">🚀</button>
+<button class="ctrl" ontouchstart="right=true" ontouchend="right=false">▶</button>
+</div>
+
+<script>
+
+const canvas=document.getElementById("game")
+const ctx=canvas.getContext("2d")
+
+function resize(){
+canvas.width=window.innerWidth
+canvas.height=window.innerHeight
+}
+window.addEventListener("resize",resize)
+resize()
+
+// 이미지
+const shipImg=new Image()
+shipImg.src="rocket.png"
+
+const meteorImg=new Image()
+meteorImg.src="meteor.png"
+
+const bgImg=new Image()
+bgImg.src="space.jpg"
+
+// 사운드
+const boom=new Audio("https://actions.google.com/sounds/v1/explosions/explosion.ogg")
+
+let ship={
+x:canvas.width/2,
+y:canvas.height*0.85,
+size:80,
+speed:12
+}
+
+let meteors=[]
+let explosions=[]
+let stars=[]
+
+let score=0
+let best=localStorage.getItem("cosmic_best")||0
+document.getElementById("best").innerText=best
+
+let meteorSpeed=6
+let spawnRate=40
+let frame=0
+let gameOver=false
+
+let left=false
+let right=false
+let boost=false
+
+// 별 생성
+for(let i=0;i<150;i++){
+stars.push({
+x:Math.random()*canvas.width,
+y:Math.random()*canvas.height,
+size:Math.random()*2
+})
+}
+
+// 키보드
+document.addEventListener("keydown",e=>{
+if(e.key==="ArrowLeft") left=true
+if(e.key==="ArrowRight") right=true
+if(e.key==="Shift") boost=true
+})
+
+document.addEventListener("keyup",e=>{
+if(e.key==="ArrowLeft") left=false
+if(e.key==="ArrowRight") right=false
+if(e.key==="Shift") boost=false
+})
+
+function spawnMeteor(){
+
+meteors.push({
+x:Math.random()*canvas.width,
+y:-80,
+size:60,
+angle:Math.random()*360
+})
+
+}
+
+function explode(x,y){
+
+boom.currentTime=0
+boom.play()
+
+for(let i=0;i<40;i++){
+
+explosions.push({
+x:x,
+y:y,
+dx:(Math.random()-0.5)*10,
+dy:(Math.random()-0.5)*10,
+life:40
+})
+
+}
+
+}
+
+function update(){
+
+if(gameOver) return
+
+frame++
+
+if(frame%spawnRate==0){
+spawnMeteor()
+}
+
+if(frame%500==0){
+meteorSpeed+=0.5
+}
+
+let speed=ship.speed
+if(boost) speed*=1.8
+
+if(left) ship.x-=speed
+if(right) ship.x+=speed
+
+if(ship.x<0) ship.x=0
+if(ship.x>canvas.width) ship.x=canvas.width
+
+for(let i=meteors.length-1;i>=0;i--){
+
+let m=meteors[i]
+
+m.y+=meteorSpeed
+m.angle+=2
+
+let dx=m.x-ship.x
+let dy=m.y-ship.y
+let dist=Math.sqrt(dx*dx+dy*dy)
+
+if(dist<60){
+
+explode(m.x,m.y)
+endGame()
+
+}
+
+if(m.y>canvas.height){
+
+meteors.splice(i,1)
+
+score++
+document.getElementById("score").innerText=score
+
+}
+
+}
+
+for(let s of stars){
+
+s.y+=1
+
+if(s.y>canvas.height){
+s.y=0
+s.x=Math.random()*canvas.width
+}
+
+}
+
+for(let i=explosions.length-1;i>=0;i--){
+
+let p=explosions[i]
+
+p.x+=p.dx
+p.y+=p.dy
+p.life--
+
+if(p.life<=0) explosions.splice(i,1)
+
+}
+
+}
+
+function draw(){
+
+ctx.drawImage(bgImg,0,0,canvas.width,canvas.height)
+
+// 별
+ctx.fillStyle="white"
+
+for(let s of stars){
+ctx.fillRect(s.x,s.y,s.size,s.size)
+}
+
+// 우주선
+ctx.drawImage(shipImg,ship.x-40,ship.y-40,80,80)
+
+// 운석
+for(let m of meteors){
+
+ctx.save()
+ctx.translate(m.x,m.y)
+ctx.rotate(m.angle*Math.PI/180)
+ctx.drawImage(meteorImg,-30,-30,60,60)
+ctx.restore()
+
+}
+
+// 폭발
+ctx.fillStyle="orange"
+
+for(let p of explosions){
+
+ctx.fillRect(p.x,p.y,4,4)
+
+}
+
+}
+
+function endGame(){
+
+gameOver=true
+
+if(score>best){
+best=score
+localStorage.setItem("cosmic_best",best)
+}
+
+document.getElementById("finalScore").innerText=score
+document.getElementById("gameOver").style.display="block"
+
+}
+
+function restart(){
+
+meteors=[]
+explosions=[]
+
+score=0
+meteorSpeed=6
+frame=0
+gameOver=false
+
+ship.x=canvas.width/2
+
+document.getElementById("score").innerText=0
+document.getElementById("gameOver").style.display="none"
+
+}
+
+function loop(){
+
+ctx.clearRect(0,0,canvas.width,canvas.height)
+
+update()
+draw()
+
+requestAnimationFrame(loop)
+
+}
+
+loop()
+
+</script>
+
+</body>
+</html>
