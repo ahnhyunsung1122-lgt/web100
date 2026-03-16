@@ -2,28 +2,36 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cosmic Reaction</title>
+<title>Cosmic Reaction 20</title>
 
 <style>
 
 body{
 margin:0;
-overflow:hidden;
 background:black;
 color:white;
 font-family:Arial;
+overflow:hidden;
 }
 
 canvas{
 display:block;
 }
 
+#menu{
+position:absolute;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+text-align:center;
+}
+
 #ui{
 position:absolute;
 top:10px;
 left:10px;
-font-size:20px;
+display:none;
+font-size:18px;
 }
 
 #gameOver{
@@ -31,215 +39,334 @@ position:absolute;
 top:50%;
 left:50%;
 transform:translate(-50%,-50%);
-text-align:center;
 display:none;
+text-align:center;
 }
 
 button{
-padding:12px 24px;
+padding:10px 20px;
 font-size:18px;
 margin-top:10px;
 }
 
-#mobile{
-position:absolute;
-bottom:20px;
-width:100%;
-display:flex;
-justify-content:center;
-gap:20px;
-}
-
-.ctrl{
-width:70px;
-height:70px;
-font-size:30px;
-}
-
 </style>
+
 </head>
 
 <body>
 
+<div id="menu">
+
+<h1>Cosmic Reaction 20</h1>
+
+<p>로켓 선택</p>
+
+<select id="rocketSelect"></select>
+
+<br><br>
+
+<button onclick="startGame()">게임 시작</button>
+
+</div>
+
 <div id="ui">
-Score: <span id="score">0</span><br>
+
+Score: <span id="score">0</span>
+<br>
+Ammo: <span id="ammo">15</span>
+<br>
 Best: <span id="best">0</span>
+
 </div>
 
 <div id="gameOver">
+
 <h1>Game Over</h1>
+
 <p>Score: <span id="finalScore"></span></p>
-<button onclick="restart()">Restart</button>
+
+<button onclick="location.reload()">Restart</button>
+
 </div>
 
 <canvas id="game"></canvas>
-
-<div id="mobile">
-<button class="ctrl" ontouchstart="left=true" ontouchend="left=false">◀</button>
-<button class="ctrl" ontouchstart="boost=true" ontouchend="boost=false">🚀</button>
-<button class="ctrl" ontouchstart="right=true" ontouchend="right=false">▶</button>
-</div>
 
 <script>
 
 const canvas=document.getElementById("game")
 const ctx=canvas.getContext("2d")
 
-function resize(){
 canvas.width=window.innerWidth
 canvas.height=window.innerHeight
-}
-window.addEventListener("resize",resize)
-resize()
 
-// 이미지
-const shipImg=new Image()
-shipImg.src="rocket.png"
+// 로켓 20종류
 
-const meteorImg=new Image()
-meteorImg.src="meteor.png"
+let rockets=[
 
-const bgImg=new Image()
-bgImg.src="space.jpg"
+{name:"기본 로켓",speed:10,color:"cyan"},
+{name:"스피드 로켓",speed:14,color:"lime"},
+{name:"탱크 로켓",speed:8,color:"orange"},
+{name:"레이저 로켓",speed:11,color:"red"},
+{name:"블루 로켓",speed:10,color:"blue"},
+{name:"그린 로켓",speed:10,color:"green"},
+{name:"골드 로켓",speed:12,color:"gold"},
+{name:"퍼플 로켓",speed:11,color:"purple"},
+{name:"화이트 로켓",speed:10,color:"white"},
+{name:"블랙 로켓",speed:13,color:"gray"},
 
-// 사운드
-const boom=new Audio("https://actions.google.com/sounds/v1/explosions/explosion.ogg")
+{name:"플라즈마 로켓",speed:12,color:"#00ffff"},
+{name:"파이어 로켓",speed:12,color:"#ff5500"},
+{name:"아이스 로켓",speed:10,color:"#88ccff"},
+{name:"네온 로켓",speed:13,color:"#00ff99"},
+{name:"다크 로켓",speed:14,color:"#444"},
+{name:"썬 로켓",speed:12,color:"#ffaa00"},
+{name:"스타 로켓",speed:11,color:"#ffffaa"},
+{name:"코스믹 로켓",speed:13,color:"#aa00ff"},
+{name:"메가 로켓",speed:15,color:"#ff00aa"},
+{name:"레전드 로켓",speed:16,color:"#ffd700"}
 
-let ship={
-x:canvas.width/2,
-y:canvas.height*0.85,
-size:80,
-speed:12
-}
+]
 
+const rocketSelect=document.getElementById("rocketSelect")
+
+rockets.forEach((r,i)=>{
+
+let opt=document.createElement("option")
+opt.value=i
+opt.text=r.name
+rocketSelect.appendChild(opt)
+
+})
+
+let ship
 let meteors=[]
+let lasers=[]
+let items=[]
 let explosions=[]
-let stars=[]
 
 let score=0
+let ammo=15
+
 let best=localStorage.getItem("cosmic_best")||0
 document.getElementById("best").innerText=best
 
-let meteorSpeed=6
-let spawnRate=40
+let meteorSpeed=4
+let spawnRate=60
+
 let frame=0
-let gameOver=false
+let playing=false
 
 let left=false
 let right=false
-let boost=false
 
-// 별 생성
-for(let i=0;i<150;i++){
-stars.push({
-x:Math.random()*canvas.width,
-y:Math.random()*canvas.height,
-size:Math.random()*2
-})
-}
-
-// 키보드
 document.addEventListener("keydown",e=>{
+
 if(e.key==="ArrowLeft") left=true
 if(e.key==="ArrowRight") right=true
-if(e.key==="Shift") boost=true
+
+if(e.code==="Space"){
+
+if(ammo>0 && playing){
+
+lasers.push({x:ship.x,y:ship.y})
+
+ammo--
+document.getElementById("ammo").innerText=ammo
+
+}
+
+}
+
 })
 
 document.addEventListener("keyup",e=>{
+
 if(e.key==="ArrowLeft") left=false
 if(e.key==="ArrowRight") right=false
-if(e.key==="Shift") boost=false
+
 })
+
+function startGame(){
+
+document.getElementById("menu").style.display="none"
+document.getElementById("ui").style.display="block"
+
+let r=rockets[rocketSelect.value]
+
+ship={
+x:canvas.width/2,
+y:canvas.height*0.85,
+speed:r.speed,
+color:r.color
+}
+
+playing=true
+
+}
 
 function spawnMeteor(){
 
+let boss=false
+
+if(Math.random()<0.05) boss=true
+
 meteors.push({
+
 x:Math.random()*canvas.width,
-y:-80,
-size:60,
-angle:Math.random()*360
+y:-50,
+size:boss?70:25+Math.random()*20,
+hp:boss?20:1,
+boss:boss
+
 })
+
+}
+
+function spawnItem(x,y){
+
+if(Math.random()<0.3){
+
+items.push({
+
+x:x,
+y:y,
+type:"ammo"
+
+})
+
+}
 
 }
 
 function explode(x,y){
 
-boom.currentTime=0
-boom.play()
-
-for(let i=0;i<40;i++){
+for(let i=0;i<30;i++){
 
 explosions.push({
+
 x:x,
 y:y,
-dx:(Math.random()-0.5)*10,
-dy:(Math.random()-0.5)*10,
+dx:(Math.random()-0.5)*8,
+dy:(Math.random()-0.5)*8,
 life:40
+
 })
 
 }
 
 }
 
+function meteorStorm(){
+
+for(let i=0;i<15;i++) spawnMeteor()
+
+}
+
 function update(){
 
-if(gameOver) return
+if(!playing) return
 
 frame++
 
-if(frame%spawnRate==0){
-spawnMeteor()
-}
+if(frame%spawnRate===0) spawnMeteor()
 
-if(frame%500==0){
+if(frame%600===0) meteorStorm()
+
+if(frame%400===0){
+
 meteorSpeed+=0.5
+spawnRate=Math.max(20,spawnRate-2)
+
 }
 
-let speed=ship.speed
-if(boost) speed*=1.8
-
-if(left) ship.x-=speed
-if(right) ship.x+=speed
+if(left) ship.x-=ship.speed
+if(right) ship.x+=ship.speed
 
 if(ship.x<0) ship.x=0
 if(ship.x>canvas.width) ship.x=canvas.width
+
+for(let l of lasers) l.y-=15
+
+for(let i=lasers.length-1;i>=0;i--){
+
+if(lasers[i].y<0) lasers.splice(i,1)
+
+}
 
 for(let i=meteors.length-1;i>=0;i--){
 
 let m=meteors[i]
 
 m.y+=meteorSpeed
-m.angle+=2
 
 let dx=m.x-ship.x
 let dy=m.y-ship.y
+
 let dist=Math.sqrt(dx*dx+dy*dy)
 
-if(dist<60){
+if(dist<m.size+20) endGame()
 
-explode(m.x,m.y)
-endGame()
+for(let j=lasers.length-1;j>=0;j--){
 
-}
+let l=lasers[j]
 
-if(m.y>canvas.height){
+let dx=m.x-l.x
+let dy=m.y-l.y
+
+let dist=Math.sqrt(dx*dx+dy*dy)
+
+if(dist<m.size){
+
+m.hp--
+
+lasers.splice(j,1)
+
+explode(l.x,l.y)
+
+if(m.hp<=0){
+
+score+=m.boss?20:5
+
+document.getElementById("score").innerText=score
+
+spawnItem(m.x,m.y)
 
 meteors.splice(i,1)
 
-score++
-document.getElementById("score").innerText=score
+explode(m.x,m.y)
 
 }
 
 }
 
-for(let s of stars){
+}
 
-s.y+=1
+if(m.y>canvas.height) meteors.splice(i,1)
 
-if(s.y>canvas.height){
-s.y=0
-s.x=Math.random()*canvas.width
+}
+
+for(let i=items.length-1;i>=0;i--){
+
+let it=items[i]
+
+it.y+=3
+
+let dx=it.x-ship.x
+let dy=it.y-ship.y
+
+let dist=Math.sqrt(dx*dx+dy*dy)
+
+if(dist<40){
+
+if(it.type==="ammo"){
+
+ammo+=5
+document.getElementById("ammo").innerText=ammo
+
+}
+
+items.splice(i,1)
+
 }
 
 }
@@ -258,37 +385,74 @@ if(p.life<=0) explosions.splice(i,1)
 
 }
 
-function draw(){
-
-ctx.drawImage(bgImg,0,0,canvas.width,canvas.height)
-
-// 별
-ctx.fillStyle="white"
-
-for(let s of stars){
-ctx.fillRect(s.x,s.y,s.size,s.size)
-}
-
-// 우주선
-ctx.drawImage(shipImg,ship.x-40,ship.y-40,80,80)
-
-// 운석
-for(let m of meteors){
+function drawRocket(x,y,color){
 
 ctx.save()
-ctx.translate(m.x,m.y)
-ctx.rotate(m.angle*Math.PI/180)
-ctx.drawImage(meteorImg,-30,-30,60,60)
+
+ctx.translate(x,y)
+
+ctx.fillStyle=color
+ctx.fillRect(-10,-25,20,50)
+
+ctx.beginPath()
+ctx.moveTo(0,-40)
+ctx.lineTo(-12,-25)
+ctx.lineTo(12,-25)
+ctx.closePath()
+ctx.fill()
+
+ctx.fillRect(-22,5,12,20)
+ctx.fillRect(10,5,12,20)
+
+ctx.fillStyle="white"
+
+ctx.beginPath()
+ctx.arc(0,-5,5,0,Math.PI*2)
+ctx.fill()
+
 ctx.restore()
 
 }
 
-// 폭발
+function draw(){
+
+ctx.clearRect(0,0,canvas.width,canvas.height)
+
+if(!playing) return
+
+drawRocket(ship.x,ship.y,ship.color)
+
+ctx.fillStyle="red"
+
+for(let l of lasers){
+
+ctx.fillRect(l.x-2,l.y,4,15)
+
+}
+
+ctx.fillStyle="gray"
+
+for(let m of meteors){
+
+ctx.beginPath()
+ctx.arc(m.x,m.y,m.size,0,Math.PI*2)
+ctx.fill()
+
+}
+
+ctx.fillStyle="yellow"
+
+for(let it of items){
+
+ctx.fillRect(it.x-8,it.y-8,16,16)
+
+}
+
 ctx.fillStyle="orange"
 
 for(let p of explosions){
 
-ctx.fillRect(p.x,p.y,4,4)
+ctx.fillRect(p.x,p.y,3,3)
 
 }
 
@@ -296,38 +460,22 @@ ctx.fillRect(p.x,p.y,4,4)
 
 function endGame(){
 
-gameOver=true
+playing=false
 
 if(score>best){
+
 best=score
 localStorage.setItem("cosmic_best",best)
+
 }
 
 document.getElementById("finalScore").innerText=score
+
 document.getElementById("gameOver").style.display="block"
 
 }
 
-function restart(){
-
-meteors=[]
-explosions=[]
-
-score=0
-meteorSpeed=6
-frame=0
-gameOver=false
-
-ship.x=canvas.width/2
-
-document.getElementById("score").innerText=0
-document.getElementById("gameOver").style.display="none"
-
-}
-
 function loop(){
-
-ctx.clearRect(0,0,canvas.width,canvas.height)
 
 update()
 draw()
